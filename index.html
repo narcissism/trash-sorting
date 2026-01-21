@@ -44,6 +44,49 @@ const trashTypes = [
 // DUMP TRUCK
 let truck = {x:-200, y:50, w:200, h:80, speed:2, dumping:false};
 
+  let dumpQueue = [];
+
+// create pile to dump over time
+function dumpPile() {
+  dumpQueue = [];
+  for(let i=0;i<10;i++){
+    const type = trashTypes[Math.floor(Math.random()*trashTypes.length)];
+    dumpQueue.push({
+      x: truck.x + 50 + Math.random()*100,
+      y: truck.y + truck.h,
+      type: type.type,
+      name: type.name,
+      draw: type.draw,
+      vy: 0
+    });
+  }
+}
+
+// in draw() loop, replace previous truck dumping logic:
+if(truck.dumping){
+  if(dumpQueue.length > 0){
+    // release one item per frame
+    const t = dumpQueue.shift();
+    trashItems.push(t);
+  } else {
+    truck.dumping = false;
+  }
+}
+
+// update trash physics (falling onto ground)
+for(let t of trashItems){
+  if(t.y < h - 200){  // simple ground collision
+    t.vy += 0.2;      // gravity
+    t.y += t.vy;
+    if(t.y > h - 200) t.y = h - 200;
+  }
+  ctx.save();
+  ctx.translate(t.x,t.y);
+  t.draw(ctx,0,0);
+  ctx.restore();
+}
+
+
 // TRASH ARRAY
 let trashItems = [];
 
