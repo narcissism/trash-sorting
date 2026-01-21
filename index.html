@@ -4,159 +4,192 @@
 <meta charset="UTF-8">
 <title>Trash Sorting Game</title>
 <style>
-body { margin:0; font-family:sans-serif; background:#eef; overflow:hidden; }
-#game { position:relative; width:100vw; height:100vh; }
-.bin {
-  position:absolute; bottom:0; width:120px; height:150px; border:3px solid #555;
-  border-radius:10px; text-align:center; padding-top:5px; font-weight:bold;
-  background:#ddd;
-}
-#paper { left: 20px; background:#f8f8f8; }
-#glass { left: 160px; background:#c8f0ff; }
-#metal { left: 300px; background:#ccc; }
-#plastic { left: 440px; background:#ffd; }
-#compost { left: 580px; background:#aaffaa; }
-.trash {
-  position:absolute; width:60px; height:60px; border-radius:5px;
-  text-align:center; line-height:60px; font-weight:bold; cursor:pointer;
-  color:#fff; font-size:12px;
-}
+body { margin:0; overflow:hidden; background:#eef; font-family:sans-serif; }
+canvas { display:block; }
 </style>
 </head>
 <body>
-<div id="game">
-  <div class="bin" id="paper">Paper</div>
-  <div class="bin" id="glass">Glass</div>
-  <div class="bin" id="metal">Metal</div>
-  <div class="bin" id="plastic">Plastic</div>
-  <div class="bin" id="compost">Compost</div>
-</div>
+<canvas id="game"></canvas>
 
 <script>
-const game = document.getElementById('game');
-const bins = {
-  paper: document.getElementById('paper'),
-  glass: document.getElementById('glass'),
-  metal: document.getElementById('metal'),
-  plastic: document.getElementById('plastic'),
-  compost: document.getElementById('compost')
-};
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let w = canvas.width = window.innerWidth;
+let h = canvas.height = window.innerHeight;
 
-// trash types
-const trashTypes = [
-  {name:'Banana', type:'compost', color:'#ffcc33'},
-  {name:'Tin Can', type:'metal', color:'#888'},
-  {name:'Newspaper', type:'paper', color:'#fff'},
-  {name:'Cardboard', type:'paper', color:'#d8a26d'},
-  {name:'Apple Core', type:'compost', color:'#ff6666'},
-  {name:'Fish Bone', type:'compost', color:'#ccc'},
-  {name:'Pile of Dirt', type:'compost', color:'#7b5e3b'},
-  {name:'Dirty Diaper', type:'compost', color:'#f3e5ab'},
-  {name:'Wine Bottle', type:'glass', color:'#5a2a2a'},
-  {name:'Beer Bottle', type:'glass', color:'#8c5e2c'},
-  {name:'Milk Jug', type:'plastic', color:'#fff'},
-  {name:'Plastic Container', type:'plastic', color:'#0af'}
+window.addEventListener('resize',()=>{ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; });
+
+// BIN DEFINITIONS
+const bins = [
+  {name:'Paper', x:50, y:h-160, w:120, h:150, type:'paper', color:'#f8f8f8'},
+  {name:'Glass', x:200, y:h-160, w:120, h:150, type:'glass', color:'#c8f0ff'},
+  {name:'Metal', x:350, y:h-160, w:120, h:150, type:'metal', color:'#ccc'},
+  {name:'Plastic', x:500, y:h-160, w:120, h:150, type:'plastic', color:'#ffd'},
+  {name:'Compost', x:650, y:h-160, w:120, h:150, type:'compost', color:'#aaffaa'}
 ];
 
-// click and drag
-let currentTrash = null;
+// TRASH TYPES WITH SIMPLE SHAPES
+const trashTypes = [
+  {name:'Banana', type:'compost', draw:(ctx,x,y)=>{ ctx.fillStyle='#ffcc33'; ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+20,y-40,x+40,y); ctx.quadraticCurveTo(x+20,y+10,x,y); ctx.fill(); }},
+  {name:'Tin Can', type:'metal', draw:(ctx,x,y)=>{ ctx.fillStyle='#888'; ctx.fillRect(x,y,30,40); }},
+  {name:'Newspaper', type:'paper', draw:(ctx,x,y)=>{ ctx.fillStyle='#fff'; ctx.fillRect(x,y,40,25); ctx.strokeRect(x,y,40,25); }},
+  {name:'Cardboard', type:'paper', draw:(ctx,x,y)=>{ ctx.fillStyle='#d8a26d'; ctx.fillRect(x,y,40,30); ctx.strokeRect(x,y,40,30); }},
+  {name:'Apple Core', type:'compost', draw:(ctx,x,y)=>{ ctx.fillStyle='#ff6666'; ctx.beginPath(); ctx.arc(x+15,y+15,15,0,Math.PI*2); ctx.fill(); }},
+  {name:'Wine Bottle', type:'glass', draw:(ctx,x,y)=>{ ctx.fillStyle='#5a2a2a'; ctx.fillRect(x+10,y,10,50); ctx.beginPath(); ctx.arc(x+15,y,5,0,Math.PI*2); ctx.fill(); }},
+  {name:'Beer Bottle', type:'glass', draw:(ctx,x,y)=>{ ctx.fillStyle='#8c5e2c'; ctx.fillRect(x+10,y,10,45); ctx.beginPath(); ctx.arc(x+15,y,5,0,Math.PI*2); ctx.fill(); }},
+  {name:'Milk Jug', type:'plastic', draw:(ctx,x,y)=>{ ctx.fillStyle='#fff'; ctx.fillRect(x+5,y,20,40); ctx.strokeRect(x+5,y,20,40); }},
+  {name:'Plastic Container', type:'plastic', draw:(ctx,x,y)=>{ ctx.fillStyle='#0af'; ctx.fillRect(x,y,30,30); }}  
+];
+
+// DUMP TRUCK
+let truck = {x:-200, y:50, w:200, h:80, speed:2, dumping:false};
+
+// TRASH ARRAY
+let trashItems = [];
+
+// DRAGGING
+let dragging=null;
 let offsetX=0, offsetY=0;
 
-function createTrash() {
-  const item = trashTypes[Math.floor(Math.random()*trashTypes.length)];
-  const div = document.createElement('div');
-  div.className='trash';
-  div.textContent=item.name;
-  div.style.background=item.color;
-  div.dataset.type=item.type;
-  div.style.left = Math.random()*(window.innerWidth-60)+'px';
-  div.style.top = '-70px';
-  game.appendChild(div);
+// SOUND
+const chime = new Audio('https://freesound.org/data/previews/341/341695_6263153-lq.mp3');
 
-  // drop animation
-  let top = -70;
-  const drop = setInterval(()=>{
-    top += 2;
-    div.style.top = top+'px';
-    if(top>window.innerHeight-200) clearInterval(drop);
-  },10);
-
-  div.onmousedown = e=>{
-    currentTrash = div;
-    offsetX = e.offsetX;
-    offsetY = e.offsetY;
+// CREATE PILE OF 10 ITEMS
+function dumpPile(){
+  for(let i=0;i<10;i++){
+    const type = trashTypes[Math.floor(Math.random()*trashTypes.length)];
+    trashItems.push({
+      x:truck.x+50+Math.random()*100,
+      y:truck.y+truck.h+10+Math.random()*20,
+      type:type.type,
+      name:type.name,
+      draw:type.draw
+    });
   }
 }
 
-// dragging
-window.onmousemove = e=>{
-  if(currentTrash){
-    currentTrash.style.left = (e.clientX - offsetX)+'px';
-    currentTrash.style.top = (e.clientY - offsetY)+'px';
+// MOUSE EVENTS
+canvas.addEventListener('mousedown', e=>{
+  for(let i=trashItems.length-1;i>=0;i--){
+    const t=trashItems[i];
+    if(e.offsetX>t.x && e.offsetX<t.x+50 && e.offsetY>t.y && e.offsetY<t.y+50){
+      dragging=t;
+      offsetX=e.offsetX-t.x;
+      offsetY=e.offsetY-t.y;
+      break;
+    }
   }
-}
+});
 
-// release
-window.onmouseup = e=>{
-  if(currentTrash){
-    // check which bin
+canvas.addEventListener('mousemove', e=>{
+  if(dragging){
+    dragging.x=e.offsetX-offsetX;
+    dragging.y=e.offsetY-offsetY;
+  }
+});
+
+canvas.addEventListener('mouseup', e=>{
+  if(dragging){
     let placed=false;
-    for(let key in bins){
-      const b = bins[key].getBoundingClientRect();
-      const t = currentTrash.getBoundingClientRect();
-      if(t.x+t.width/2>b.x && t.x+t.width/2<b.x+b.width &&
-         t.y+t.height/2>b.y && t.y+t.height/2<b.y+b.height){
-           placed=true;
-           if(currentTrash.dataset.type===key){
-             // correct
-             currentTrash.style.display='none';
-             showCorrect(currentTrash);
-           } else {
-             // wrong
-             showWrong(currentTrash);
-           }
+    for(let b of bins){
+      if(dragging.x+25>b.x && dragging.x+25<b.x+b.w && dragging.y+25>b.y && dragging.y+25<b.y+b.h){
+        placed=true;
+        if(dragging.type===b.type){
+          // correct
+          showCorrect(dragging);
+          trashItems.splice(trashItems.indexOf(dragging),1);
+        } else {
+          // wrong
+          showWrong(dragging);
+          dragging.x=truck.x+50; // reset position
+          dragging.y=truck.y+truck.h+10;
+        }
       }
     }
-    currentTrash=null;
+    dragging=null;
   }
+});
+
+// CORRECT / WRONG FEEDBACK
+function showCorrect(t){
+  // golden ring
+  const ring = {x:t.x, y:t.y, r:0, alpha:1};
+  correctRings.push(ring);
+  chime.play();
 }
 
-function showCorrect(trash){
-  // golden ring + chime
-  const ring = document.createElement('div');
-  ring.style.position='absolute';
-  ring.style.left = trash.style.left;
-  ring.style.top = trash.style.top;
-  ring.style.width = '60px';
-  ring.style.height = '60px';
-  ring.style.border = '5px solid gold';
-  ring.style.borderRadius='50%';
-  ring.style.zIndex=1000;
-  game.appendChild(ring);
-  setTimeout(()=>game.removeChild(ring),800);
-  const audio = new Audio('https://freesound.org/data/previews/341/341695_6263153-lq.mp3'); // chime
-  audio.play();
+function showWrong(t){
+  wrongFlashes.push({x:t.x, y:t.y, size:50, alpha:1});
 }
 
-function showWrong(trash){
-  // red flash + alert
-  const flash = document.createElement('div');
-  flash.style.position='absolute';
-  flash.style.left = trash.style.left;
-  flash.style.top = trash.style.top;
-  flash.style.width = '60px';
-  flash.style.height = '60px';
-  flash.style.background='red';
-  flash.style.opacity='0.7';
-  flash.style.zIndex=1000;
-  flash.style.borderRadius='5px';
-  game.appendChild(flash);
-  setTimeout(()=>game.removeChild(flash),500);
-  alert('Try Again!');
+// ANIMATION
+let correctRings=[];
+let wrongFlashes=[];
+
+function draw(){
+  ctx.clearRect(0,0,w,h);
+
+  // draw bins
+  for(let b of bins){
+    ctx.fillStyle=b.color;
+    ctx.fillRect(b.x,b.y,b.w,b.h);
+    ctx.strokeStyle='#555';
+    ctx.strokeRect(b.x,b.y,b.w,b.h);
+    ctx.fillStyle='#000';
+    ctx.font='16px sans-serif';
+    ctx.fillText(b.name,b.x+10,b.y+20);
+  }
+
+  // draw truck
+  ctx.fillStyle='#444';
+  ctx.fillRect(truck.x,truck.y,truck.w,truck.h);
+  ctx.fillStyle='#666';
+  ctx.fillRect(truck.x+20,truck.y-20,160,20); // truck top
+
+  // dump trash if truck is dumping
+  if(truck.dumping){
+    // we already created the pile
+    truck.dumping=false;
+  }
+
+  // move truck
+  truck.x += truck.speed;
+  if(truck.x>w) { truck.x=-200; truck.dumping=true; dumpPile(); }
+
+  // draw trash
+  for(let t of trashItems){
+    ctx.save();
+    ctx.translate(t.x,t.y);
+    t.draw(ctx,0,0);
+    ctx.restore();
+  }
+
+  // draw correct rings
+  for(let i=correctRings.length-1;i>=0;i--){
+    const r=correctRings[i];
+    ctx.beginPath();
+    ctx.arc(r.x+25,r.y+25,r.r,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(255,215,0,${r.alpha})`;
+    ctx.lineWidth=4;
+    ctx.stroke();
+    r.r += 2;
+    r.alpha -=0.03;
+    if(r.alpha<=0) correctRings.splice(i,1);
+  }
+
+  // draw wrong flashes
+  for(let i=wrongFlashes.length-1;i>=0;i--){
+    const f=wrongFlashes[i];
+    ctx.fillStyle=`rgba(255,0,0,${f.alpha})`;
+    ctx.fillRect(f.x,f.y,f.size,f.size);
+    f.alpha -=0.05;
+    if(f.alpha<=0) wrongFlashes.splice(i,1);
+  }
+
+  requestAnimationFrame(draw);
 }
 
-// keep dumping trash every 15 seconds
-setInterval(createTrash,1500);
+draw();
 </script>
 
 </body>
