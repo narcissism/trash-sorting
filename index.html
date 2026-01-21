@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trash Sorting Game</title>
+<style>
+body { margin:0; font-family:sans-serif; background:#eef; overflow:hidden; }
+#game { position:relative; width:100vw; height:100vh; }
+.bin {
+  position:absolute; bottom:0; width:120px; height:150px; border:3px solid #555;
+  border-radius:10px; text-align:center; padding-top:5px; font-weight:bold;
+  background:#ddd;
+}
+#paper { left: 20px; background:#f8f8f8; }
+#glass { left: 160px; background:#c8f0ff; }
+#metal { left: 300px; background:#ccc; }
+#plastic { left: 440px; background:#ffd; }
+#compost { left: 580px; background:#aaffaa; }
+.trash {
+  position:absolute; width:60px; height:60px; border-radius:5px;
+  text-align:center; line-height:60px; font-weight:bold; cursor:pointer;
+  color:#fff; font-size:12px;
+}
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="bin" id="paper">Paper</div>
+  <div class="bin" id="glass">Glass</div>
+  <div class="bin" id="metal">Metal</div>
+  <div class="bin" id="plastic">Plastic</div>
+  <div class="bin" id="compost">Compost</div>
+</div>
+
+<script>
+const game = document.getElementById('game');
+const bins = {
+  paper: document.getElementById('paper'),
+  glass: document.getElementById('glass'),
+  metal: document.getElementById('metal'),
+  plastic: document.getElementById('plastic'),
+  compost: document.getElementById('compost')
+};
+
+// trash types
+const trashTypes = [
+  {name:'Banana', type:'compost', color:'#ffcc33'},
+  {name:'Tin Can', type:'metal', color:'#888'},
+  {name:'Newspaper', type:'paper', color:'#fff'},
+  {name:'Cardboard', type:'paper', color:'#d8a26d'},
+  {name:'Apple Core', type:'compost', color:'#ff6666'},
+  {name:'Fish Bone', type:'compost', color:'#ccc'},
+  {name:'Pile of Dirt', type:'compost', color:'#7b5e3b'},
+  {name:'Dirty Diaper', type:'compost', color:'#f3e5ab'},
+  {name:'Wine Bottle', type:'glass', color:'#5a2a2a'},
+  {name:'Beer Bottle', type:'glass', color:'#8c5e2c'},
+  {name:'Milk Jug', type:'plastic', color:'#fff'},
+  {name:'Plastic Container', type:'plastic', color:'#0af'}
+];
+
+// click and drag
+let currentTrash = null;
+let offsetX=0, offsetY=0;
+
+function createTrash() {
+  const item = trashTypes[Math.floor(Math.random()*trashTypes.length)];
+  const div = document.createElement('div');
+  div.className='trash';
+  div.textContent=item.name;
+  div.style.background=item.color;
+  div.dataset.type=item.type;
+  div.style.left = Math.random()*(window.innerWidth-60)+'px';
+  div.style.top = '-70px';
+  game.appendChild(div);
+
+  // drop animation
+  let top = -70;
+  const drop = setInterval(()=>{
+    top += 2;
+    div.style.top = top+'px';
+    if(top>window.innerHeight-200) clearInterval(drop);
+  },10);
+
+  div.onmousedown = e=>{
+    currentTrash = div;
+    offsetX = e.offsetX;
+    offsetY = e.offsetY;
+  }
+}
+
+// dragging
+window.onmousemove = e=>{
+  if(currentTrash){
+    currentTrash.style.left = (e.clientX - offsetX)+'px';
+    currentTrash.style.top = (e.clientY - offsetY)+'px';
+  }
+}
+
+// release
+window.onmouseup = e=>{
+  if(currentTrash){
+    // check which bin
+    let placed=false;
+    for(let key in bins){
+      const b = bins[key].getBoundingClientRect();
+      const t = currentTrash.getBoundingClientRect();
+      if(t.x+t.width/2>b.x && t.x+t.width/2<b.x+b.width &&
+         t.y+t.height/2>b.y && t.y+t.height/2<b.y+b.height){
+           placed=true;
+           if(currentTrash.dataset.type===key){
+             // correct
+             currentTrash.style.display='none';
+             showCorrect(currentTrash);
+           } else {
+             // wrong
+             showWrong(currentTrash);
+           }
+      }
+    }
+    currentTrash=null;
+  }
+}
+
+function showCorrect(trash){
+  // golden ring + chime
+  const ring = document.createElement('div');
+  ring.style.position='absolute';
+  ring.style.left = trash.style.left;
+  ring.style.top = trash.style.top;
+  ring.style.width = '60px';
+  ring.style.height = '60px';
+  ring.style.border = '5px solid gold';
+  ring.style.borderRadius='50%';
+  ring.style.zIndex=1000;
+  game.appendChild(ring);
+  setTimeout(()=>game.removeChild(ring),800);
+  const audio = new Audio('https://freesound.org/data/previews/341/341695_6263153-lq.mp3'); // chime
+  audio.play();
+}
+
+function showWrong(trash){
+  // red flash + alert
+  const flash = document.createElement('div');
+  flash.style.position='absolute';
+  flash.style.left = trash.style.left;
+  flash.style.top = trash.style.top;
+  flash.style.width = '60px';
+  flash.style.height = '60px';
+  flash.style.background='red';
+  flash.style.opacity='0.7';
+  flash.style.zIndex=1000;
+  flash.style.borderRadius='5px';
+  game.appendChild(flash);
+  setTimeout(()=>game.removeChild(flash),500);
+  alert('Try Again!');
+}
+
+// keep dumping trash every 15 seconds
+setInterval(createTrash,1500);
+</script>
+
+</body>
+</html>
